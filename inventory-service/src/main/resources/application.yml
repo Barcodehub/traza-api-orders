@@ -1,0 +1,10 @@
+server:
+  port: 8083
+
+spring:
+  application:
+    name: inventory-service
+
+logging:
+  level:
+    org.barcodev.inventoryservice: INFO

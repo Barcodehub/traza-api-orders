@@ -1,0 +1,616 @@
+{
+  "info": {
+    "_postman_id": "microservicios-saga-orchestrated",
+    "name": "🏗️ Microservicios Saga Orquestada - Completo",
+    "description": "Colección completa para probar la arquitectura de microservicios con patrón Saga Orquestada.\n\n**Características:**\n- 3 microservicios (order, payment, inventory)\n- Patrón Saga con compensaciones automáticas\n- Simulación de fallos aleatorios y forzados\n- Tests automáticos en cada request\n- Correlación con X-Saga-Id\n\n**Cómo usar:**\n1. Importar esta colección en Postman\n2. Ejecutar los servicios (./start-all.sh o start-all.bat)\n3. Ejecutar los requests en orden\n4. Ver los logs en las terminales de cada servicio",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {"key": "order_service_url", "value": "http://localhost:8081", "type": "string"},
+    {"key": "payment_service_url", "value": "http://localhost:8082", "type": "string"},
+    {"key": "inventory_service_url", "value": "http://localhost:8083", "type": "string"},
+    {"key": "order_id", "value": "", "type": "string"},
+    {"key": "saga_id", "value": "", "type": "string"},
+    {"key": "payment_id", "value": "", "type": "string"},
+    {"key": "reservation_id", "value": "", "type": "string"}
+  ],
+  "item": [
+    {
+      "name": "📋 Configuración Inicial",
+      "description": "Configurar el estado inicial de los servicios antes de las pruebas",
+      "item": [
+        {
+          "name": "✅ 1. Disable all failures (Estado limpio)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Payment failure disabled\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Inventory failure disabled\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{payment_service_url}}/test/failure?enable=false",
+              "host": ["{{payment_service_url}}"],
+              "path": ["test", "failure"],
+              "query": [{"key": "enable", "value": "false"}]
+            },
+            "description": "Desactivar los fallos forzados en payment-service (vuelve a modo aleatorio 30%)"
+          }
+        },
+        {
+          "name": "✅ 2. Disable inventory failure",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Inventory failure disabled\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{inventory_service_url}}/test/failure?enable=false",
+              "host": ["{{inventory_service_url}}"],
+              "path": ["test", "failure"],
+              "query": [{"key": "enable", "value": "false"}]
+            },
+            "description": "Desactivar los fallos forzados en inventory-service (vuelve a modo aleatorio 20%)"
+          }
+        }
+      ]
+    },
+    {
+      "name": "✅ ESCENARIO 1: Orden Exitosa",
+      "description": "Flujo completo exitoso: Payment OK + Inventory OK = CONFIRMED",
+      "item": [
+        {
+          "name": "1️⃣ Asegurar que no hay fallos forzados",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Payment OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{payment_service_url}}/test/failure?enable=false",
+              "host": ["{{payment_service_url}}"],
+              "path": ["test", "failure"],
+              "query": [{"key": "enable", "value": "false"}]
+            }
+          }
+        },
+        {
+          "name": "2️⃣ Crear Orden (debe ser CONFIRMED)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status es 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test(\"Orden está CONFIRMED\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.status).to.eql(\"CONFIRMED\");",
+                  "});",
+                  "",
+                  "pm.test(\"Ordem tiene sagaId\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.sagaId).to.not.be.empty;",
+                  "});",
+                  "",
+                  "// Guardar variables",
+                  "var jsonData = pm.response.json();",
+                  "pm.collectionVariables.set(\"order_id\", jsonData.id);",
+                  "pm.collectionVariables.set(\"saga_id\", jsonData.sagaId);",
+                  "console.log(\"✅ Order created - ID: \" + jsonData.id);",
+                  "console.log(\"✅ SAGA ID: \" + jsonData.sagaId);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"user-scenario1-success\",\n  \"total\": 150.00\n}"
+            },
+            "url": {
+              "raw": "{{order_service_url}}/orders",
+              "host": ["{{order_service_url}}"],
+              "path": ["orders"]
+            },
+            "description": "Crear una orden que debe completarse exitosamente. El payment-service procesará el pago y el inventory-service reservará el stock."
+          }
+        },
+        {
+          "name": "3️⃣ Ver Orden Creada",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status es 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Orden tiene el mismo ID\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.id).to.eql(pm.collectionVariables.get(\"order_id\"));",
+                  "});",
+                  "",
+                  "pm.test(\"Estado final es CONFIRMED\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.status).to.eql(\"CONFIRMED\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{order_service_url}}/orders/{{order_id}}",
+              "host": ["{{order_service_url}}"],
+              "path": ["orders", "{{order_id}}"]
+            },
+            "description": "Consultar la orden creada para verificar que su estado es CONFIRMED"
+          }
+        }
+      ]
+    },
+    {
+      "name": "❌ ESCENARIO 2: Fallo en Payment",
+      "description": "Flujo con fallo: Payment FAILED = CANCELLED",
+      "item": [
+        {
+          "name": "1️⃣ Forzar fallo en Payment Service",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Failure mode enabled\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "console.log(\"🔴 Payment-service: Forced failure ENABLED\");"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{payment_service_url}}/test/failure?enable=true",
+              "host": ["{{payment_service_url}}"],
+              "path": ["test", "failure"],
+              "query": [{"key": "enable", "value": "true"}]
+            },
+            "description": "Activar fallo forzado en payment-service. El siguiente request para crear una orden fallará en el paso de pago."
+          }
+        },
+        {
+          "name": "2️⃣ Crear Orden (debe fallar en Payment)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status es 400 (Bad Request)\", function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "",
+                  "pm.test(\"Response tiene mensaje de error\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.error).to.not.be.empty;",
+                  "});",
+                  "",
+                  "console.log(\"❌ Order creation failed at Payment step (expected)\");"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"user-scenario2-payment-fail\",\n  \"total\": 200.00\n}"
+            },
+            "url": {
+              "raw": "{{order_service_url}}/orders",
+              "host": ["{{order_service_url}}"],
+              "path": ["orders"]
+            },
+            "description": "Intentar crear una orden cuando payment-service está forzado a fallar. La orden será rechazada y quedará CANCELLED."
+          }
+        },
+        {
+          "name": "3️⃣ Restaurar Payment Service",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Failure mode disabled\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "console.log(\"🟢 Payment-service: Forced failure DISABLED\");"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{payment_service_url}}/test/failure?enable=false",
+              "host": ["{{payment_service_url}}"],
+              "path": ["test", "failure"],
+              "query": [{"key": "enable", "value": "false"}]
+            },
+            "description": "Desactivar fallo forzado en payment-service (vuelve a modo aleatorio 30%)"
+          }
+        }
+      ]
+    },
+    {
+      "name": "⚙️ ESCENARIO 3: Fallo en Inventory (con Compensación)",
+      "description": "Flujo con compensación: Payment OK → Inventory FAILED → Refund Payment → CANCELLED",
+      "item": [
+        {
+          "name": "1️⃣ Asegurar Payment OK",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Payment OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{payment_service_url}}/test/failure?enable=false",
+              "host": ["{{payment_service_url}}"],
+              "path": ["test", "failure"],
+              "query": [{"key": "enable", "value": "false"}]
+            }
+          }
+        },
+        {
+          "name": "2️⃣ Forzar fallo en Inventory Service",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Failure mode enabled\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "console.log(\"🔴 Inventory-service: Forced failure ENABLED\");"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{inventory_service_url}}/test/failure?enable=true",
+              "host": ["{{inventory_service_url}}"],
+              "path": ["test", "failure"],
+              "query": [{"key": "enable", "value": "true"}]
+            },
+            "description": "Activar fallo forzado en inventory-service. El siguiente request fallará en la reserva de inventario PERO COMPENSARÁ el pago."
+          }
+        },
+        {
+          "name": "3️⃣ Crear Orden (fallará en Inventory)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status es 400 (Bad Request)\", function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "",
+                  "pm.test(\"Response tiene mensaje de error\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.error).to.not.be.empty;",
+                  "});",
+                  "",
+                  "console.log(\"WARNING: Check LOGS to see COMPENSATION:\");",
+                  "console.log(\"   [SAGA:xxx] Payment SUCCESS\");",
+                  "console.log(\"   [SAGA:xxx] Inventory reservation FAILED\");",
+                  "console.log(\"   [SAGA:xxx] Compensating: refunding payment <-- COMPENSATION\");",
+                  "console.log(\"   [SAGA:xxx] Payment refunded\");",
+                  "console.log(\"   [SAGA:xxx] Order CANCELLED\");"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"user-scenario3-inventory-fail\",\n  \"total\": 300.00\n}"
+            },
+            "url": {
+              "raw": "{{order_service_url}}/orders",
+              "host": ["{{order_service_url}}"],
+              "path": ["orders"]
+            },
+            "description": "Crear una orden cuando inventory-service está forzado a fallar.\n\n⚠️ IMPORTANTE: Revisa los LOGS EN LAS TERMINALES para ver:\n1. Payment procesado exitosamente\n2. Inventory falla\n3. COMPENSACIÓN: Payment es reembolsado automáticamente\n4. Orden termina en CANCELLED"
+          }
+        },
+        {
+          "name": "4️⃣ Restaurar Inventory Service",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Failure mode disabled\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "console.log(\"🟢 Inventory-service: Forced failure DISABLED\");"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{inventory_service_url}}/test/failure?enable=false",
+              "host": ["{{inventory_service_url}}"],
+              "path": ["test", "failure"],
+              "query": [{"key": "enable", "value": "false"}]
+            },
+            "description": "Desactivar fallo forzado en inventory-service (vuelve a modo aleatorio 20%)"
+          }
+        }
+      ]
+    },
+    {
+      "name": "🎲 Test Aleatorio (sin fallos forzados)",
+      "description": "Crear órdenes con fallos aleatorios. Payment-service: 30% de fallos. Inventory-service: 20% de fallos.",
+      "item": [
+        {
+          "name": "1️⃣ Resetear a modo aleatorio",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{payment_service_url}}/test/failure?enable=false",
+              "host": ["{{payment_service_url}}"],
+              "path": ["test", "failure"],
+              "query": [{"key": "enable", "value": "false"}]
+            }
+          }
+        },
+        {
+          "name": "2️⃣ Resetear inventory aleatorio",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{inventory_service_url}}/test/failure?enable=false",
+              "host": ["{{inventory_service_url}}"],
+              "path": ["test", "failure"],
+              "query": [{"key": "enable", "value": "false"}]
+            }
+          }
+        },
+        {
+          "name": "3️⃣ Crear Orden 1",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    var jsonData = pm.response.json();",
+                  "    if (jsonData.status === 'CONFIRMED') {",
+                  "        pm.test(\"✅ Orden 1 CONFIRMED\", function () { true; });",
+                  "    } else {",
+                  "        pm.test(\"📊 Orden 1 CANCELLED\", function () { true; });",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"user-random-1\",\n  \"total\": 100.00\n}"
+            },
+            "url": {
+              "raw": "{{order_service_url}}/orders",
+              "host": ["{{order_service_url}}"],
+              "path": ["orders"]
+            }
+          }
+        },
+        {
+          "name": "3️⃣ Crear Orden 2",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    var jsonData = pm.response.json();",
+                  "    if (jsonData.status === 'CONFIRMED') {",
+                  "        pm.test(\"✅ Orden 2 CONFIRMED\", function () { true; });",
+                  "    } else {",
+                  "        pm.test(\"📊 Orden 2 CANCELLED\", function () { true; });",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"user-random-2\",\n  \"total\": 120.50\n}"
+            },
+            "url": {
+              "raw": "{{order_service_url}}/orders",
+              "host": ["{{order_service_url}}"],
+              "path": ["orders"]
+            }
+          }
+        },
+        {
+          "name": "3️⃣ Crear Orden 3",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    var jsonData = pm.response.json();",
+                  "    if (jsonData.status === 'CONFIRMED') {",
+                  "        pm.test(\"✅ Orden 3 CONFIRMED\", function () { true; });",
+                  "    } else {",
+                  "        pm.test(\"📊 Orden 3 CANCELLED\", function () { true; });",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"user-random-3\",\n  \"total\": 250.75\n}"
+            },
+            "url": {
+              "raw": "{{order_service_url}}/orders",
+              "host": ["{{order_service_url}}"],
+              "path": ["orders"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🛠️ Herramientas",
+      "description": "Requests útiles para debugging y monitoreo",
+      "item": [
+        {
+          "name": "Enable Payment Failure",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{payment_service_url}}/test/failure?enable=true",
+              "host": ["{{payment_service_url}}"],
+              "path": ["test", "failure"],
+              "query": [{"key": "enable", "value": "true"}]
+            }
+          }
+        },
+        {
+          "name": "Disable Payment Failure",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{payment_service_url}}/test/failure?enable=false",
+              "host": ["{{payment_service_url}}"],
+              "path": ["test", "failure"],
+              "query": [{"key": "enable", "value": "false"}]
+            }
+          }
+        },
+        {
+          "name": "Enable Inventory Failure",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{inventory_service_url}}/test/failure?enable=true",
+              "host": ["{{inventory_service_url}}"],
+              "path": ["test", "failure"],
+              "query": [{"key": "enable", "value": "true"}]
+            }
+          }
+        },
+        {
+          "name": "Disable Inventory Failure",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{inventory_service_url}}/test/failure?enable=false",
+              "host": ["{{inventory_service_url}}"],
+              "path": ["test", "failure"],
+              "query": [{"key": "enable", "value": "false"}]
+            }
+          }
+        },
+        {
+          "name": "Get Order (Last Created)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{order_service_url}}/orders/{{order_id}}",
+              "host": ["{{order_service_url}}"],
+              "path": ["orders", "{{order_id}}"]
+            },
+            "description": "Recupera la última orden creada usando el order_id en variables"
+          }
+        }
+      ]
+    }
+  ]
+}

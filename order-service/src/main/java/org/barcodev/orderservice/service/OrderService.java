@@ -1,0 +1,112 @@
+package org.barcodev.orderservice.service;
+
+import lombok.extern.slf4j.Slf4j;
+import org.barcodev.orderservice.client.ServiceClient;
+import org.barcodev.orderservice.dto.*;
+import org.barcodev.orderservice.model.Order;
+import org.barcodev.orderservice.model.OrderStatus;
+import org.barcodev.orderservice.repository.OrderRepository;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.UUID;
+
+@Service
+@Slf4j
+public class OrderService {
+
+    private final OrderRepository orderRepository;
+    private final ServiceClient serviceClient;
+
+    public OrderService(OrderRepository orderRepository, ServiceClient serviceClient) {
+        this.orderRepository = orderRepository;
+        this.serviceClient = serviceClient;
+    }
+
+    @Transactional
+    public Order createOrder(CreateOrderRequest request) {
+        String sagaId = UUID.randomUUID().toString();
+        String orderId = UUID.randomUUID().toString();
+
+        log.info("[SAGA:{}] Starting order creation for orderId: {}", sagaId, orderId);
+
+        // Step 1: Create order in PENDING status
+        Order order = new Order(orderId, request.getUserId(), OrderStatus.PENDING, request.getTotal(), sagaId);
+        order = orderRepository.save(order);
+        log.info("[SAGA:{}] Order created with status PENDING", sagaId);
+
+        String paymentId = null;
+        String reservationId = null;
+
+        try {
+            // Step 2: Process payment
+            log.info("[SAGA:{}] Calling payment-service", sagaId);
+            PaymentRequest paymentRequest = new PaymentRequest(orderId, request.getUserId(), request.getTotal());
+            PaymentResponse paymentResponse = serviceClient.processPayment(paymentRequest, sagaId, request.getUserId());
+
+            if (!"SUCCESS".equals(paymentResponse.getStatus())) {
+                throw new RuntimeException("Payment failed: " + paymentResponse.getMessage());
+            }
+
+            paymentId = paymentResponse.getPaymentId();
+            log.info("[SAGA:{}] Payment successful, paymentId: {}", sagaId, paymentId);
+
+            // Step 3: Reserve inventory
+            log.info("[SAGA:{}] Calling inventory-service", sagaId);
+            InventoryRequest inventoryRequest = new InventoryRequest(orderId, "PRODUCT-001", 1);
+            InventoryResponse inventoryResponse = serviceClient.reserveInventory(inventoryRequest, sagaId, request.getUserId());
+
+            if (!"SUCCESS".equals(inventoryResponse.getStatus())) {
+                throw new RuntimeException("Inventory reservation failed: " + inventoryResponse.getMessage());
+            }
+
+            reservationId = inventoryResponse.getReservationId();
+            log.info("[SAGA:{}] Inventory reserved, reservationId: {}", sagaId, reservationId);
+
+            // Step 4: Confirm order
+            order.setStatus(OrderStatus.CONFIRMED);
+            order = orderRepository.save(order);
+            log.info("[SAGA:{}] Order CONFIRMED successfully", sagaId);
+
+            return order;
+
+        } catch (Exception e) {
+            log.error("[SAGA:{}] Error in saga: {}", sagaId, e.getMessage());
+
+            // COMPENSATIONS
+            if (reservationId != null) {
+                try {
+                    log.info("[SAGA:{}] Compensating: releasing inventory", sagaId);
+                    ReleaseRequest releaseRequest = new ReleaseRequest(reservationId, orderId);
+                    serviceClient.releaseInventory(releaseRequest, sagaId, request.getUserId());
+                    log.info("[SAGA:{}] Inventory released", sagaId);
+                } catch (Exception ex) {
+                    log.error("[SAGA:{}] Failed to release inventory: {}", sagaId, ex.getMessage());
+                }
+            }
+
+            if (paymentId != null) {
+                try {
+                    log.info("[SAGA:{}] Compensating: refunding payment", sagaId);
+                    RefundRequest refundRequest = new RefundRequest(paymentId, orderId);
+                    serviceClient.refundPayment(refundRequest, sagaId, request.getUserId());
+                    log.info("[SAGA:{}] Payment refunded", sagaId);
+                } catch (Exception ex) {
+                    log.error("[SAGA:{}] Failed to refund payment: {}", sagaId, ex.getMessage());
+                }
+            }
+
+            // Cancel order
+            order.setStatus(OrderStatus.CANCELLED);
+            orderRepository.save(order);
+            log.info("[SAGA:{}] Order CANCELLED", sagaId);
+
+            throw new RuntimeException("Order creation failed: " + e.getMessage());
+        }
+    }
+
+    public Order getOrder(String orderId) {
+        return orderRepository.findById(orderId)
+            .orElseThrow(() -> new RuntimeException("Order not found: " + orderId));
+    }
+}
