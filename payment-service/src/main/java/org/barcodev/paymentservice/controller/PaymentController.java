@@ -20,24 +20,18 @@ public class PaymentController {
     }
 
     @PostMapping
-    public ResponseEntity<PaymentResponse> processPayment(
-            @RequestBody PaymentRequest request,
-            @RequestHeader(value = "X-Saga-Id", required = false) String sagaId,
-            @RequestHeader(value = "X-User-Id", required = false) String userId) {
+    public ResponseEntity<PaymentResponse> processPayment(@RequestBody PaymentRequest request) {
 
         log.info("Received payment request for orderId: {}", request.getOrderId());
-        PaymentResponse response = paymentService.processPayment(request, sagaId, userId);
+        PaymentResponse response = paymentService.processPayment(request);
         return ResponseEntity.ok(response);
     }
 
     @PostMapping("/refund")
-    public ResponseEntity<String> refundPayment(
-            @RequestBody RefundRequest request,
-            @RequestHeader(value = "X-Saga-Id", required = false) String sagaId,
-            @RequestHeader(value = "X-User-Id", required = false) String userId) {
+    public ResponseEntity<String> refundPayment(@RequestBody RefundRequest request) {
 
         log.info("Received refund request for paymentId: {}", request.getPaymentId());
-        paymentService.refundPayment(request, sagaId, userId);
+        paymentService.refundPayment(request);
         return ResponseEntity.ok("Refund processed");
     }
 }

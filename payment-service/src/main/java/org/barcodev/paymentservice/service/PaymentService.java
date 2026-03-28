@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
+import org.slf4j.MDC;
 
 @Service
 @Slf4j
@@ -15,7 +16,10 @@ public class PaymentService {
 
     private boolean forcedFailure = false;
 
-    public PaymentResponse processPayment(PaymentRequest request, String sagaId, String userId) {
+    public PaymentResponse processPayment(PaymentRequest request) {
+        String sagaId = MDC.get("sagaId");
+        String userId = MDC.get("userId");
+        
         log.info("[SAGA:{}] [X-User-Id:{}] Processing payment for orderId: {}, amount: {}",
             sagaId, userId, request.getOrderId(), request.getAmount());
 
@@ -31,7 +35,10 @@ public class PaymentService {
         return new PaymentResponse(paymentId, "SUCCESS", "Payment processed successfully");
     }
 
-    public void refundPayment(RefundRequest request, String sagaId, String userId) {
+    public void refundPayment(RefundRequest request) {
+        String sagaId = MDC.get("sagaId");
+        String userId = MDC.get("userId");
+        
         log.info("[SAGA:{}] [X-User-Id:{}] Refunding payment: {}", sagaId, userId, request.getPaymentId());
 
         // Simulate refund processing

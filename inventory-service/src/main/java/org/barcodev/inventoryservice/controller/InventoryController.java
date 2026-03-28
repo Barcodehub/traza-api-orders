@@ -20,24 +20,18 @@ public class InventoryController {
     }
 
     @PostMapping("/reserve")
-    public ResponseEntity<InventoryResponse> reserveInventory(
-            @RequestBody InventoryRequest request,
-            @RequestHeader(value = "X-Saga-Id", required = false) String sagaId,
-            @RequestHeader(value = "X-User-Id", required = false) String userId) {
+    public ResponseEntity<InventoryResponse> reserveInventory(@RequestBody InventoryRequest request) {
 
         log.info("Received inventory reservation request for orderId: {}", request.getOrderId());
-        InventoryResponse response = inventoryService.reserveInventory(request, sagaId, userId);
+        InventoryResponse response = inventoryService.reserveInventory(request);
         return ResponseEntity.ok(response);
     }
 
     @PostMapping("/release")
-    public ResponseEntity<String> releaseInventory(
-            @RequestBody ReleaseRequest request,
-            @RequestHeader(value = "X-Saga-Id", required = false) String sagaId,
-            @RequestHeader(value = "X-User-Id", required = false) String userId) {
+    public ResponseEntity<String> releaseInventory(@RequestBody ReleaseRequest request) {
 
         log.info("Received inventory release request for reservationId: {}", request.getReservationId());
-        inventoryService.releaseInventory(request, sagaId, userId);
+        inventoryService.releaseInventory(request);
         return ResponseEntity.ok("Inventory released");
     }
 }

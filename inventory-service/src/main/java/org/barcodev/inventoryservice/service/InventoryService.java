@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
+import org.slf4j.MDC;
 
 @Service
 @Slf4j
@@ -15,7 +16,10 @@ public class InventoryService {
 
     private boolean forcedFailure = false;
 
-    public InventoryResponse reserveInventory(InventoryRequest request, String sagaId, String userId) {
+    public InventoryResponse reserveInventory(InventoryRequest request) {
+        String sagaId = MDC.get("sagaId");
+        String userId = MDC.get("userId");
+        
         log.info("[SAGA:{}] [X-User-Id:{}] Reserving inventory for orderId: {}, productId: {}, quantity: {}",
             sagaId, userId, request.getOrderId(), request.getProductId(), request.getQuantity());
 
@@ -31,7 +35,10 @@ public class InventoryService {
         return new InventoryResponse(reservationId, "SUCCESS", "Inventory reserved successfully");
     }
 
-    public void releaseInventory(ReleaseRequest request, String sagaId, String userId) {
+    public void releaseInventory(ReleaseRequest request) {
+        String sagaId = MDC.get("sagaId");
+        String userId = MDC.get("userId");
+        
         log.info("[SAGA:{}] [X-User-Id:{}] Releasing inventory reservation: {}", sagaId, userId, request.getReservationId());
 
         // Simulate release processing

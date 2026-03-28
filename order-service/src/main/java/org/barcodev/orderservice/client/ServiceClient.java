@@ -2,8 +2,6 @@ package org.barcodev.orderservice.client;
 
 import org.barcodev.orderservice.dto.*;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 
@@ -22,58 +20,34 @@ public class ServiceClient {
         this.restTemplate = restTemplate;
     }
 
-    public PaymentResponse processPayment(PaymentRequest request, String sagaId, String userId) {
-        HttpHeaders headers = new HttpHeaders();
-        headers.set("X-Saga-Id", sagaId);
-        headers.set("X-User-Id", userId);
-
-        HttpEntity<PaymentRequest> entity = new HttpEntity<>(request, headers);
-
+    public PaymentResponse processPayment(PaymentRequest request) {
         return restTemplate.postForObject(
             paymentServiceUrl + "/payments",
-            entity,
+            request,
             PaymentResponse.class
         );
     }
 
-    public void refundPayment(RefundRequest request, String sagaId, String userId) {
-        HttpHeaders headers = new HttpHeaders();
-        headers.set("X-Saga-Id", sagaId);
-        headers.set("X-User-Id", userId);
-
-        HttpEntity<RefundRequest> entity = new HttpEntity<>(request, headers);
-
+    public void refundPayment(RefundRequest request) {
         restTemplate.postForObject(
             paymentServiceUrl + "/payments/refund",
-            entity,
+            request,
             String.class
         );
     }
 
-    public InventoryResponse reserveInventory(InventoryRequest request, String sagaId, String userId) {
-        HttpHeaders headers = new HttpHeaders();
-        headers.set("X-Saga-Id", sagaId);
-        headers.set("X-User-Id", userId);
-
-        HttpEntity<InventoryRequest> entity = new HttpEntity<>(request, headers);
-
+    public InventoryResponse reserveInventory(InventoryRequest request) {
         return restTemplate.postForObject(
             inventoryServiceUrl + "/inventory/reserve",
-            entity,
+            request,
             InventoryResponse.class
         );
     }
 
-    public void releaseInventory(ReleaseRequest request, String sagaId, String userId) {
-        HttpHeaders headers = new HttpHeaders();
-        headers.set("X-Saga-Id", sagaId);
-        headers.set("X-User-Id", userId);
-
-        HttpEntity<ReleaseRequest> entity = new HttpEntity<>(request, headers);
-
+    public void releaseInventory(ReleaseRequest request) {
         restTemplate.postForObject(
             inventoryServiceUrl + "/inventory/release",
-            entity,
+            request,
             String.class
         );
     }
