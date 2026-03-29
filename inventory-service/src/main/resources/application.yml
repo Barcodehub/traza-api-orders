@@ -7,4 +7,24 @@ spring:
 
 logging:
   level:
-    org.barcodev.inventoryservice: INFO
+    org.barcodev: INFO
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: prometheus, health
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: always
+    prometheus:
+      enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+    distribution:
+      percentiles-histogram:
+        http:
+          server:
+            requests: true
