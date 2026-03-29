@@ -9,6 +9,8 @@ import org.barcodev.orderservice.repository.OrderRepository;
 import org.slf4j.MDC;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Counter;
 
 import java.util.UUID;
 
@@ -18,10 +20,14 @@ public class OrderService {
 
     private final OrderRepository orderRepository;
     private final ServiceClient serviceClient;
+    private final Counter ordersCreatedCounter;
+    private final Counter sagaFailedCounter;
 
-    public OrderService(OrderRepository orderRepository, ServiceClient serviceClient) {
+    public OrderService(OrderRepository orderRepository, ServiceClient serviceClient, MeterRegistry meterRegistry) {
         this.orderRepository = orderRepository;
         this.serviceClient = serviceClient;
+        this.ordersCreatedCounter = meterRegistry.counter("business.orders.created.total", "type", "order_creation");
+        this.sagaFailedCounter = meterRegistry.counter("business.sagas.failed.total", "type", "saga_processing");
     }
 
     @Transactional
@@ -72,11 +78,17 @@ public class OrderService {
                 order.setStatus(OrderStatus.CONFIRMED);
                 order = orderRepository.save(order);
                 log.info("[SAGA:{}] Order CONFIRMED successfully", sagaId);
+                
+                // Increment custom metric for successful orders
+                ordersCreatedCounter.increment();
 
                 return order;
 
             } catch (Exception e) {
                 log.error("[SAGA:{}] Error in saga: {}", sagaId, e.getMessage());
+                
+                // Increment custom metric for failed sagas
+                sagaFailedCounter.increment();
 
                 // COMPENSATIONS
                 if (reservationId != null) {
