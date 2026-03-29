@@ -26,8 +26,8 @@ public class OrderService {
     public OrderService(OrderRepository orderRepository, ServiceClient serviceClient, MeterRegistry meterRegistry) {
         this.orderRepository = orderRepository;
         this.serviceClient = serviceClient;
-        this.ordersCreatedCounter = meterRegistry.counter("business.orders.created.total", "type", "order_creation");
-        this.sagaFailedCounter = meterRegistry.counter("business.sagas.failed.total", "type", "saga_processing");
+        this.ordersCreatedCounter = meterRegistry.counter("orders.created.total", "type", "order_creation");
+        this.sagaFailedCounter = meterRegistry.counter("saga.failed.total", "type", "saga_processing");
     }
 
     @Transactional
