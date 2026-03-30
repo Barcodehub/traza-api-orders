@@ -5,6 +5,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
 import org.springframework.web.client.RestTemplate;
 import org.barcodev.orderservice.interceptor.HeaderPropagationInterceptor;
+import org.springframework.boot.web.client.RestTemplateBuilder;
 import java.util.Collections;
 
 @SpringBootApplication
@@ -15,9 +16,7 @@ public class OrderServiceApplication {
     }
 
     @Bean
-    public RestTemplate restTemplate(HeaderPropagationInterceptor headerPropagationInterceptor) {
-        RestTemplate restTemplate = new RestTemplate();
-        restTemplate.setInterceptors(Collections.singletonList(headerPropagationInterceptor));
-        return restTemplate;
+    public RestTemplate restTemplate(RestTemplateBuilder builder, HeaderPropagationInterceptor headerPropagationInterceptor) {
+        return builder.additionalInterceptors(headerPropagationInterceptor).build();
     }
 }

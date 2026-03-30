@@ -11,8 +11,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Counter;
-
 import java.util.UUID;
+import java.math.BigDecimal;
+import io.micrometer.tracing.Tracer;
 
 @Service
 @Slf4j
@@ -22,12 +23,14 @@ public class OrderService {
     private final ServiceClient serviceClient;
     private final Counter ordersCreatedCounter;
     private final Counter sagaFailedCounter;
+    private final Tracer tracer;
 
-    public OrderService(OrderRepository orderRepository, ServiceClient serviceClient, MeterRegistry meterRegistry) {
+    public OrderService(OrderRepository orderRepository, ServiceClient serviceClient, MeterRegistry meterRegistry, Tracer tracer) {
         this.orderRepository = orderRepository;
         this.serviceClient = serviceClient;
         this.ordersCreatedCounter = meterRegistry.counter("orders.created.total", "type", "order_creation");
         this.sagaFailedCounter = meterRegistry.counter("saga.failed.total", "type", "saga_processing");
+        this.tracer = tracer;
     }
 
     @Transactional
@@ -37,6 +40,11 @@ public class OrderService {
 
         MDC.put("sagaId", sagaId);
         MDC.put("userId", request.getUserId());
+
+        if (tracer.currentSpan() != null) {
+            tracer.currentSpan().tag("sagaId", sagaId);
+            tracer.currentSpan().tag("userId", request.getUserId());
+        }
 
         try {
             log.info("[SAGA:{}] Starting order creation for orderId: {}", sagaId, orderId);
@@ -79,6 +87,11 @@ public class OrderService {
                 order = orderRepository.save(order);
                 log.info("[SAGA:{}] Order CONFIRMED successfully", sagaId);
                 
+                // Simular un fallo HTTP 500 en Jaeger si el total es negativo y forzar la compensación
+                if (request.getTotal() != null && request.getTotal().compareTo(BigDecimal.ZERO) < 0) {
+                    throw new RuntimeException("Simulated error to trigger 500 tracing in Jaeger");
+                }
+
                 // Increment custom metric for successful orders
                 ordersCreatedCounter.increment();
 
@@ -117,6 +130,11 @@ public class OrderService {
                 order.setStatus(OrderStatus.CANCELLED);
                 orderRepository.save(order);
                 log.info("[SAGA:{}] Order CANCELLED", sagaId);
+
+                if (tracer.currentSpan() != null) {
+                    tracer.currentSpan().tag("error", "true");
+                    tracer.currentSpan().event("SAGA_FAILED: " + e.getMessage());
+                }
 
                 throw new RuntimeException("Order creation failed: " + e.getMessage());
             }

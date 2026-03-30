@@ -4,6 +4,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.barcodev.orderservice.dto.CreateOrderRequest;
 import org.barcodev.orderservice.model.Order;
 import org.barcodev.orderservice.service.OrderService;
+import java.math.BigDecimal;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -27,6 +28,10 @@ public class OrderController {
             return ResponseEntity.status(HttpStatus.CREATED).body(order);
         } catch (Exception e) {
             log.error("Order creation failed: {}", e.getMessage());
+            if (request.getTotal() != null && request.getTotal().compareTo(BigDecimal.ZERO) < 0) {
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new ErrorResponse(e.getMessage()));
+            }
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(new ErrorResponse(e.getMessage()));
         }
