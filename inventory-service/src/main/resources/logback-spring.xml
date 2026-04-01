@@ -6,7 +6,7 @@
     <appender name="JSON_CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <encoder class="net.logstash.logback.encoder.LogstashEncoder">
             <!-- 1. Campos adicionales fijos (servicio y entorno) -->
-            <customFields>{"service": "inventory-service", "environment": "${springProfiles}"}</customFields>
+            <customFields>{"app_service": "inventory-service", "environment": "${springProfiles}"}</customFields>
 
             <!-- 2. MDC se incluye automáticamente en net.logstash.logback.encoder.LogstashEncoder -->
             <!-- Configuración por defecto ya mapea nivel, thread, logger, mensaje, timestamp y MDC -->
@@ -20,8 +20,22 @@
         </encoder>
     </appender>
 
+    <!-- Appender para escribir logs en archivo JSON, recolectado por Filebeat -->
+    <appender name="JSON_FILE" class="ch.qos.logback.core.FileAppender">
+        <file>logs/inventory-service.log</file>
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <customFields>{"app_service": "inventory-service", "environment": "${springProfiles}"}</customFields>
+            <jsonGeneratorDecorator class="net.logstash.logback.mask.MaskingJsonGeneratorDecorator">
+                <valueMasker class="net.logstash.logback.mask.RegexValueMasker">
+                    <regex>(?i)(password|token|bearer)\s*[:=]\s*([^\s,;]+)</regex>
+                </valueMasker>
+            </jsonGeneratorDecorator>
+        </encoder>
+    </appender>
+
     <root level="INFO">
         <appender-ref ref="JSON_CONSOLE" />
+        <appender-ref ref="JSON_FILE" />
     </root>
 
 </configuration>

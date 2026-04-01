@@ -1,0 +1,26 @@
+filebeat.inputs:
+- type: filestream
+  id: microservices-logs
+  enabled: true
+  paths:
+    - /usr/share/logs/*.log
+  parsers:
+    - ndjson:
+        target: ""
+        add_error_key: true
+        overwrite_keys: true
+
+processors:
+  - rename:
+      fields:
+        - from: "service"
+          to: "app_service"
+      ignore_missing: true
+      fail_on_error: false
+
+output.elasticsearch:
+  hosts: ["http://elasticsearch:9200"]
+  index: "microservices-logs-%{+yyyy.MM.dd}"
+setup.template.name: "microservices"
+setup.template.pattern: "microservices-logs-*"
+setup.ilm.enabled: false

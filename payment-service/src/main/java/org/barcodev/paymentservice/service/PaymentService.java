@@ -9,6 +9,8 @@ import org.springframework.stereotype.Service;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 import org.slf4j.MDC;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
 @Service
 @Slf4j
@@ -26,7 +28,7 @@ public class PaymentService {
         // Simulate random failure (30% probability)
         if (forcedFailure || shouldSimulateFailure(30)) {
             log.warn("[SAGA:{}] Payment FAILED (simulated)", sagaId);
-            return new PaymentResponse(null, "FAILED", "Insufficient funds or payment gateway error");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Insufficient funds or payment gateway error");
         }
 
         String paymentId = "PAY-" + UUID.randomUUID().toString();

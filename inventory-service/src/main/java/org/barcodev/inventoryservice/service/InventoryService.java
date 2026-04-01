@@ -9,6 +9,8 @@ import org.springframework.stereotype.Service;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 import org.slf4j.MDC;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
 @Service
 @Slf4j
@@ -26,7 +28,7 @@ public class InventoryService {
         // Simulate random failure (20% probability)
         if (forcedFailure || shouldSimulateFailure(20)) {
             log.warn("[SAGA:{}] Inventory reservation FAILED (simulated)", sagaId);
-            return new InventoryResponse(null, "FAILED", "Out of stock or inventory service error");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Out of stock or inventory service error");
         }
 
         String reservationId = "RES-" + UUID.randomUUID().toString();
