@@ -11,8 +11,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Counter;
-
+import org.springframework.web.client.HttpStatusCodeException;
 import java.util.UUID;
+import java.math.BigDecimal;
 
 @Service
 @Slf4j
@@ -55,10 +56,6 @@ public class OrderService {
                 PaymentRequest paymentRequest = new PaymentRequest(orderId, request.getUserId(), request.getTotal());
                 PaymentResponse paymentResponse = serviceClient.processPayment(paymentRequest);
 
-                if (!"SUCCESS".equals(paymentResponse.getStatus())) {
-                    throw new RuntimeException("Payment failed: " + paymentResponse.getMessage());
-                }
-
                 paymentId = paymentResponse.getPaymentId();
                 log.info("[SAGA:{}] Payment successful, paymentId: {}", sagaId, paymentId);
 
@@ -67,10 +64,6 @@ public class OrderService {
                 InventoryRequest inventoryRequest = new InventoryRequest(orderId, "PRODUCT-001", 1);
                 InventoryResponse inventoryResponse = serviceClient.reserveInventory(inventoryRequest);
 
-                if (!"SUCCESS".equals(inventoryResponse.getStatus())) {
-                    throw new RuntimeException("Inventory reservation failed: " + inventoryResponse.getMessage());
-                }
-
                 reservationId = inventoryResponse.getReservationId();
                 log.info("[SAGA:{}] Inventory reserved, reservationId: {}", sagaId, reservationId);
 
@@ -78,15 +71,55 @@ public class OrderService {
                 order.setStatus(OrderStatus.CONFIRMED);
                 order = orderRepository.save(order);
                 log.info("[SAGA:{}] Order CONFIRMED successfully", sagaId);
-                
+
+                // Simular un fallo HTTP 500 en Jaeger si el total es negativo y forzar la compensación
+                if (request.getTotal() != null && request.getTotal().compareTo(BigDecimal.ZERO) < 0) {
+                    throw new RuntimeException("Simulated error to trigger 500 tracing in Jaeger");
+                }
+
                 // Increment custom metric for successful orders
                 ordersCreatedCounter.increment();
 
                 return order;
 
+            } catch (HttpStatusCodeException e) {
+                log.error("[SAGA:{}] Error in saga (HTTP status {}): {}", sagaId, e.getStatusCode(), e.getResponseBodyAsString());
+
+                // Increment custom metric for failed sagas
+                sagaFailedCounter.increment();
+
+                // COMPENSATIONS
+                if (reservationId != null) {
+                    try {
+                        log.info("[SAGA:{}] Compensating: releasing inventory", sagaId);
+                        ReleaseRequest releaseRequest = new ReleaseRequest(reservationId, orderId);
+                        serviceClient.releaseInventory(releaseRequest);
+                        log.info("[SAGA:{}] Inventory released", sagaId);
+                    } catch (Exception ex) {
+                        log.error("[SAGA:{}] Failed to release inventory: {}", sagaId, ex.getMessage());
+                    }
+                }
+
+                if (paymentId != null) {
+                    try {
+                        log.info("[SAGA:{}] Compensating: refunding payment", sagaId);
+                        RefundRequest refundRequest = new RefundRequest(paymentId, orderId);
+                        serviceClient.refundPayment(refundRequest);
+                        log.info("[SAGA:{}] Payment refunded", sagaId);
+                    } catch (Exception ex) {
+                        log.error("[SAGA:{}] Failed to refund payment: {}", sagaId, ex.getMessage());
+                    }
+                }
+
+                // Cancel order
+                order.setStatus(OrderStatus.CANCELLED);
+                orderRepository.save(order);
+                log.info("[SAGA:{}] Order CANCELLED after compensation", sagaId);
+
+                throw new RuntimeException("Saga failed: " + e.getResponseBodyAsString(), e);
             } catch (Exception e) {
                 log.error("[SAGA:{}] Error in saga: {}", sagaId, e.getMessage());
-                
+
                 // Increment custom metric for failed sagas
                 sagaFailedCounter.increment();
 
@@ -127,6 +160,6 @@ public class OrderService {
 
     public Order getOrder(String orderId) {
         return orderRepository.findById(orderId)
-            .orElseThrow(() -> new RuntimeException("Order not found: " + orderId));
+                .orElseThrow(() -> new RuntimeException("Order not found: " + orderId));
     }
 }
