@@ -9,12 +9,18 @@ import org.springframework.stereotype.Service;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 import org.slf4j.MDC;
+import io.micrometer.tracing.Tracer;
 
 @Service
 @Slf4j
 public class InventoryService {
 
     private boolean forcedFailure = false;
+    private final Tracer tracer;
+
+    public InventoryService(Tracer tracer) {
+        this.tracer = tracer;
+    }
 
     public InventoryResponse reserveInventory(InventoryRequest request) {
         String sagaId = MDC.get("sagaId");
@@ -26,6 +32,9 @@ public class InventoryService {
         // Simulate random failure (20% probability)
         if (forcedFailure || shouldSimulateFailure(20)) {
             log.warn("[SAGA:{}] Inventory reservation FAILED (simulated)", sagaId);
+            if (tracer.currentSpan() != null) {
+                tracer.currentSpan().error(new RuntimeException("Simulated Inventory Failure"));
+            }
             return new InventoryResponse(null, "FAILED", "Out of stock or inventory service error");
         }
 

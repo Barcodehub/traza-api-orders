@@ -38,13 +38,11 @@ management:
   endpoints:
     web:
       exposure:
-        include: prometheus, health
+        include: health, metrics
       base-path: /actuator
   endpoint:
     health:
       show-details: always
-    prometheus:
-      enabled: true
   metrics:
     tags:
       application: ${spring.application.name}
@@ -59,4 +57,8 @@ management:
       probability: 1.0 # Sample 100% of requests for dev
   otlp:
     tracing:
-      endpoint: http://localhost:4318/v1/traces # Jaeger OTLP endpoint (example, esto es opentelemetry collector)
+      endpoint: http://localhost:4318/v1/traces # datadog OTLP endpoint
+    metrics:
+      export:
+        url: http://localhost:4318/v1/metrics
+        step: 10s

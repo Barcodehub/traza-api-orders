@@ -9,12 +9,18 @@ import org.springframework.stereotype.Service;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 import org.slf4j.MDC;
+import io.micrometer.tracing.Tracer;
 
 @Service
 @Slf4j
 public class PaymentService {
 
     private boolean forcedFailure = false;
+    private final Tracer tracer;
+
+    public PaymentService(Tracer tracer) {
+        this.tracer = tracer;
+    }
 
     public PaymentResponse processPayment(PaymentRequest request) {
         String sagaId = MDC.get("sagaId");
@@ -26,6 +32,9 @@ public class PaymentService {
         // Simulate random failure (30% probability)
         if (forcedFailure || shouldSimulateFailure(30)) {
             log.warn("[SAGA:{}] Payment FAILED (simulated)", sagaId);
+            if (tracer.currentSpan() != null) {
+                tracer.currentSpan().error(new RuntimeException("Simulated Payment Failure"));
+            }
             return new PaymentResponse(null, "FAILED", "Insufficient funds or payment gateway error");
         }
 

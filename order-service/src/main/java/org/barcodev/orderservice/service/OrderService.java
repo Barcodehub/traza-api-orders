@@ -132,8 +132,7 @@ public class OrderService {
                 log.info("[SAGA:{}] Order CANCELLED", sagaId);
 
                 if (tracer.currentSpan() != null) {
-                    tracer.currentSpan().tag("error", "true");
-                    tracer.currentSpan().event("SAGA_FAILED: " + e.getMessage());
+                    tracer.currentSpan().event("SAGA_COMPENSATED: " + e.getMessage());
                 }
 
                 throw new RuntimeException("Order creation failed: " + e.getMessage());

@@ -18,9 +18,9 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-webflux'
     implementation 'net.logstash.logback:logstash-logback-encoder:9.0'
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
-    implementation 'io.micrometer:micrometer-registry-prometheus'
     implementation 'io.micrometer:micrometer-tracing-bridge-otel'
     implementation 'io.opentelemetry:opentelemetry-exporter-otlp'
+    implementation 'io.micrometer:micrometer-registry-otlp'
     constraints {
         implementation('com.fasterxml.jackson.core:jackson-core:2.16.1') {
             because 'Fix CVEs'
