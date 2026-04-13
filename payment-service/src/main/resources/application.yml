@@ -5,9 +5,30 @@ spring:
   application:
     name: payment-service
 
+  kafka:
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    template:
+      observation-enabled: true
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+    listener:
+      observation-enabled: true
+    consumer:
+      group-id: payment-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "org.barcodev.paymentservice.dto"
+        spring.json.use.type.headers: true
+        spring.json.type.mapping: "orderEvent:org.barcodev.paymentservice.dto.OrderEvent"
+
 logging:
   level:
     org.barcodev: INFO
+  pattern:
+    level: "%5p [traceId=%X{traceId} spanId=%X{spanId} userId=%X{userId} eventId=%X{eventId} correlationId=%X{correlationId}]"
 
 management:
   endpoints:
@@ -32,8 +53,8 @@ management:
       probability: 1.0 # Sample 100% of requests for dev
   otlp:
     tracing:
-      endpoint: http://localhost:4318/v1/traces # datadog OTLP endpoint
+      endpoint: ${OTLP_TRACING_ENDPOINT:http://localhost:4318/v1/traces} # datadog OTLP endpoint
     metrics:
       export:
-        url: http://localhost:4318/v1/metrics
+        url: ${OTLP_METRICS_ENDPOINT:http://localhost:4318/v1/metrics}
         step: 10s

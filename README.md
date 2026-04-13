@@ -120,7 +120,27 @@ Si no tienes actuator, verifica los logs o prueba directamente los endpoints.
 
 ### Order Service (8081)
 
-#### Crear Orden
+#### Crear Orden (Kafka)
+
+```bash
+# Envío exitoso
+curl -X POST http://localhost:8081/api/kafka/send \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userId": "user-123",
+    "total": 99.99
+  }'
+
+# Envío con fallo intencional (simulado en el consumidor)
+curl -X POST http://localhost:8081/api/kafka/send-fail \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userId": "user-fail",
+    "total": 50.00
+  }'
+```
+
+#### Crear Orden (REST Saga)
 
 ```bash
 curl -X POST http://localhost:8081/orders \

@@ -21,6 +21,7 @@ dependencies {
     implementation 'io.micrometer:micrometer-tracing-bridge-otel'
     implementation 'io.opentelemetry:opentelemetry-exporter-otlp'
     implementation 'io.micrometer:micrometer-registry-otlp'
+    implementation 'org.springframework.kafka:spring-kafka'
     constraints {
         implementation('com.fasterxml.jackson.core:jackson-core:2.16.1') {
             because 'Fix CVEs'

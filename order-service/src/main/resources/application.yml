@@ -5,6 +5,23 @@ spring:
   application:
     name: order-service
 
+  kafka:
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    template:
+      observation-enabled: true
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: all
+      retries: 3
+      properties:
+        enable.idempotence: true
+        max.in.flight.requests.per.connection: 5
+        spring.json.add.type.headers: true
+        spring.json.type.mapping: orderEvent:org.barcodev.orderservice.dto.OrderEvent
+    admin:
+      auto-create: true
+
   datasource:
     url: jdbc:h2:mem:orderdb
     driver-class-name: org.h2.Driver
@@ -33,6 +50,8 @@ services:
 logging:
   level:
     org.barcodev.orderservice: INFO
+  pattern:
+    level: "%5p [traceId=%X{traceId} spanId=%X{spanId} userId=%X{userId} eventId=%X{eventId} correlationId=%X{correlationId}]"
 
 management:
   endpoints:
@@ -43,6 +62,7 @@ management:
   endpoint:
     health:
       show-details: always
+
   metrics:
     tags:
       application: ${spring.application.name}
@@ -57,8 +77,8 @@ management:
       probability: 1.0 # Sample 100% of requests for dev
   otlp:
     tracing:
-      endpoint: http://localhost:4318/v1/traces # datadog OTLP endpoint
+      endpoint: ${OTLP_TRACING_ENDPOINT:http://localhost:4318/v1/traces} # datadog OTLP endpoint
     metrics:
       export:
-        url: http://localhost:4318/v1/metrics
+        url: ${OTLP_METRICS_ENDPOINT:http://localhost:4318/v1/metrics}
         step: 10s

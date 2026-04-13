@@ -2,10 +2,10 @@ version: '3.8'
 
 services:
   datadog:
-    image: gcr.io/datadoghq/agent:latest
+    image: gcr.io/datadoghq/agent:7.52.0
     container_name: datadog-agent
     environment:
-      - DD_API_KEY=API_KEY
+      - DD_API_KEY=${DD_API_KEY}
       - DD_APM_ENABLED=true
       - DD_APM_NON_LOCAL_TRAFFIC=true
       - DD_SITE=datadoghq.com
@@ -13,9 +13,100 @@ services:
       - DD_OTLP_CONFIG_RECEIVER_PROTOCOLS_GRPC_ENDPOINT=0.0.0.0:4317
       - DD_LOGS_ENABLED=true
       - DD_LOGS_CONFIG_CONTAINER_COLLECT_ALL=true
+      - DD_LOGS_CONFIG_AUTO_MULTI_LINE_DETECTION=false
     ports:
       - "8126:8126" # APM (traces)
       - "4317:4317" # OTLP gRPC
       - "4318:4318" # OTLP HTTP
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /proc/:/host/proc/:ro
+      - /sys/fs/cgroup/:/host/sys/fs/cgroup:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+
+  inventory-service:
+    build:
+      context: ../inventory-service
+    container_name: inventory-service
+    ports:
+      - "8083:8083"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://datadog:4318
+      - OTLP_TRACING_ENDPOINT=http://datadog:4318/v1/traces
+      - OTLP_METRICS_ENDPOINT=http://datadog:4318/v1/metrics
+      - OTEL_SERVICE_NAME=inventory-service
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+    depends_on:
+      - datadog
+      - kafka
+    labels:
+      com.datadoghq.tags.service: "inventory-service"
+      com.datadoghq.tags.env: "dev"
+      com.datadoghq.ad.logs: '[{"source": "spring-boot", "service": "inventory-service"}]'
+
+  order-service:
+    build:
+      context: ../order-service
+    container_name: order-service
+    ports:
+      - "8081:8081"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://datadog:4318
+      - OTLP_TRACING_ENDPOINT=http://datadog:4318/v1/traces
+      - OTLP_METRICS_ENDPOINT=http://datadog:4318/v1/metrics
+      - OTEL_SERVICE_NAME=order-service
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - DD_SYSTEM_PROBE_ENABLED=false
+    depends_on:
+      - datadog
+      - kafka
+    labels:
+      com.datadoghq.tags.service: "order-service"
+      com.datadoghq.tags.env: "dev"
+      com.datadoghq.ad.logs: '[{"source": "spring-boot", "service": "order-service"}]'
+
+  payment-service:
+    build:
+      context: ../payment-service
+    container_name: payment-service
+    ports:
+      - "8082:8082"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://datadog:4318
+      - OTLP_TRACING_ENDPOINT=http://datadog:4318/v1/traces
+      - OTLP_METRICS_ENDPOINT=http://datadog:4318/v1/metrics
+      - OTEL_SERVICE_NAME=payment-service
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+    depends_on:
+      - datadog
+      - kafka
+    labels:
+      com.datadoghq.tags.service: "payment-service"
+      com.datadoghq.tags.env: "dev"
+      com.datadoghq.ad.logs: '[{"source": "spring-boot", "service": "payment-service"}]'
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.4.0
+    container_name: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+
+  kafka:
+    image: confluentinc/cp-kafka:7.4.0
+    container_name: kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,PLAINTEXT_HOST://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
