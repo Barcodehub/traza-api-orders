@@ -516,5 +516,5 @@ logging:
 ## 📞 Contacto
 
 Desarrollado para demostración de arquitectura de microservicios con saga orquestada.
-#   t r a z a - a p i - o r d e r s  
+ 
  
